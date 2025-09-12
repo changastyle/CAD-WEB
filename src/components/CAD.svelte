@@ -13,6 +13,12 @@
     let drawnLines = [];
     let operationsHistory = [];
     let nextOperationId = 1;
+  /** @type {{ x:number, y:number }|null } */
+  let selectedVertex = null;
+  /** @type {'vertex'|'edge'|'none'} */
+  let selectionMode = 'none'; // 'vertex' | 'edge' | 'none'
+  /** @type {{ lineId:number, end:'start'|'end' }|null } */
+  let draggingVertex = null; // { lineId, end: 'start'|'end' }
 
   let preview = null; // { startX, startY, endX, endY, currentAngle }
   let showGrid = true;
@@ -36,12 +42,32 @@
         // terminar cadena de pluma o cancelar dibujo
         drawing = false;
         preview = null;
+        // también cancelar drag de vértice
+        draggingVertex = null;
       } else if (e.key === 'p' || e.key === 'P') {
         selectTool('pen');
       } else if (e.key === 'o' || e.key === 'O') {
         selectTool('pencil');
       } else if (e.key === 'e' || e.key === 'E') {
         selectTool('eraser');
+      } else if (e.key === '1') {
+        selectionMode = 'vertex';
+        selectedLineId = null;
+      } else if (e.key === '2') {
+        selectionMode = 'edge';
+        selectedVertex = null;
+      } else if (e.key === 'Enter' && selectionMode === 'vertex' && draggingVertex && selectedVertex) {
+        // confirmar colocación en el snap actual
+        drawnLines = drawnLines.map(l => {
+          if (l.id !== draggingVertex.lineId) return l;
+          if (draggingVertex.end === 'start') {
+            return { ...l, startX: selectedVertex.x, startY: selectedVertex.y, dist: Math.hypot((l.endX - selectedVertex.x),(l.endY - selectedVertex.y)), angle: Math.round(Math.atan2(l.endY - selectedVertex.y, l.endX - selectedVertex.x) * 180/Math.PI) };
+          } else {
+            return { ...l, endX: selectedVertex.x, endY: selectedVertex.y, dist: Math.hypot((selectedVertex.x - l.startX),(selectedVertex.y - l.startY)), angle: Math.round(Math.atan2(selectedVertex.y - l.startY, selectedVertex.x - l.startX) * 180/Math.PI) };
+          }
+        });
+        operationsHistory = drawnLines;
+        draggingVertex = null;
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -61,6 +87,57 @@
   }
 
   function handleCanvasClick(point) {
+    // Selection modes
+    if (selectionMode === 'vertex') {
+      const xw = (point.x - offsetX) / scale;
+      const yw = (point.y - offsetY) / scale;
+      const snapped = showGrid ? {
+        x: Math.round(xw / gridSpacingPx) * gridSpacingPx,
+        y: Math.round(yw / gridSpacingPx) * gridSpacingPx
+      } : { x: xw, y: yw };
+      // find nearest vertex within tolerance
+      const tol = gridSpacingPx * 0.6;
+      /** @type {{ x:number, y:number, end:'start'|'end', lineId:number } | null } */
+      let bestInfo = null; let bestD = Infinity;
+      drawnLines.forEach(line => {
+        /** @type {{ x:number, y:number, end:'start'|'end', lineId:number }[]} */
+        const candidates = [
+          { x: line.startX, y: line.startY, end: 'start', lineId: line.id },
+          { x: line.endX, y: line.endY, end: 'end', lineId: line.id }
+        ];
+        candidates.forEach(p => {
+          const d = Math.hypot(p.x - snapped.x, p.y - snapped.y);
+          if (d < bestD && d <= tol) { bestInfo = p; bestD = d; }
+        });
+      });
+      selectedVertex = bestInfo ? { x: bestInfo.x, y: bestInfo.y } : null;
+      draggingVertex = bestInfo ? { lineId: bestInfo.lineId, end: bestInfo.end } : null;
+      return;
+    }
+    if (selectionMode === 'edge') {
+      const xw = (point.x - offsetX) / scale;
+      const yw = (point.y - offsetY) / scale;
+      // distance point to segment; pick nearest within tolerance
+      function distPointToSeg(px, py, x1, y1, x2, y2) {
+        const vx = x2 - x1, vy = y2 - y1;
+        const wx = px - x1, wy = py - y1;
+        const c1 = vx * wx + vy * wy;
+        if (c1 <= 0) return Math.hypot(px - x1, py - y1);
+        const c2 = vx * vx + vy * vy;
+        if (c2 <= c1) return Math.hypot(px - x2, py - y2);
+        const b = c1 / c2;
+        const bx = x1 + b * vx, by = y1 + b * vy;
+        return Math.hypot(px - bx, py - by);
+      }
+      const tol = gridSpacingPx * 0.6;
+      let bestId = null; let bestD = Infinity;
+      drawnLines.forEach(line => {
+        const d = distPointToSeg(xw, yw, line.startX, line.startY, line.endX, line.endY);
+        if (d < bestD && d <= tol) { bestD = d; bestId = line.id; }
+      });
+      selectedLineId = bestId;
+      return;
+    }
     if (tool !== 'pencil' && tool !== 'pen') return;
     // convert screen -> world using current transform
     const mouseX = (point.x - offsetX) / scale;
@@ -108,6 +185,24 @@
   }
 
   function handleCanvasMove(point) {
+    // dragging vertex
+    if (selectionMode === 'vertex' && draggingVertex) {
+      const xw = (point.x - offsetX) / scale;
+      const yw = (point.y - offsetY) / scale;
+      const snappedX = showGrid ? Math.round(xw / gridSpacingPx) * gridSpacingPx : xw;
+      const snappedY = showGrid ? Math.round(yw / gridSpacingPx) * gridSpacingPx : yw;
+      drawnLines = drawnLines.map(l => {
+        if (l.id !== draggingVertex.lineId) return l;
+        if (draggingVertex.end === 'start') {
+          return { ...l, startX: snappedX, startY: snappedY, dist: Math.hypot((l.endX - snappedX),(l.endY - snappedY)), angle: Math.round(Math.atan2(l.endY - snappedY, l.endX - snappedX) * 180/Math.PI) };
+        } else {
+          return { ...l, endX: snappedX, endY: snappedY, dist: Math.hypot((snappedX - l.startX),(snappedY - l.startY)), angle: Math.round(Math.atan2(snappedY - l.startY, snappedX - l.startX) * 180/Math.PI) };
+        }
+      });
+      operationsHistory = drawnLines;
+      selectedVertex = { x: snappedX, y: snappedY };
+      return;
+    }
     // En pluma: mostrar preview desde el último endpoint aunque no haya empezado la cadena aún
     if (!(drawing || (tool === 'pen' && operationsHistory.length > 0))) return;
     const mouseX = (point.x - offsetX) / scale;
@@ -167,6 +262,8 @@
       tool={tool}
       drawnLines={drawnLines}
       selectedLineId={selectedLineId}
+      selectedVertex={selectedVertex}
+      showVertices={selectionMode==='vertex'}
       preview={preview}
       showGrid={showGrid}
       gridSpacingPx={gridSpacingPx}
@@ -186,6 +283,27 @@
       }}
       onClick={handleCanvasClick}
       onMove={handleCanvasMove}
+      onDown={(p) => {
+        if (selectionMode === 'vertex') {
+          // pick/start drag
+          handleCanvasClick(p);
+        }
+      }}
+      onUp={() => {
+        // snap and finalize on mouse up
+        if (selectionMode === 'vertex' && draggingVertex && selectedVertex) {
+          drawnLines = drawnLines.map(l => {
+            if (l.id !== draggingVertex.lineId) return l;
+            if (draggingVertex.end === 'start') {
+              return { ...l, startX: selectedVertex.x, startY: selectedVertex.y, dist: Math.hypot((l.endX - selectedVertex.x),(l.endY - selectedVertex.y)), angle: Math.round(Math.atan2(l.endY - selectedVertex.y, l.endX - selectedVertex.x) * 180/Math.PI) };
+            } else {
+              return { ...l, endX: selectedVertex.x, endY: selectedVertex.y, dist: Math.hypot((selectedVertex.x - l.startX),(selectedVertex.y - l.startY)), angle: Math.round(Math.atan2(selectedVertex.y - l.startY, selectedVertex.x - l.startX) * 180/Math.PI) };
+            }
+          });
+          operationsHistory = drawnLines;
+        }
+        draggingVertex = null;
+      }}
     />
     <div class="toolbar">
         <button class="tool-btn pencil-btn {tool==='pencil' ? 'active' : ''}"

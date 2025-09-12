@@ -14,6 +14,10 @@
   export let drawnLines = [];
   /** @type {number|null} */
   export let selectedLineId = null;
+  /** @type {{ x:number, y:number }|null} */
+  export let selectedVertex = null;
+  /** @type {boolean} */
+  export let showVertices = false;
   /** @type {Preview|null} */
   export let preview = null; // { startX, startY, endX, endY, currentAngle }
   /** @type {string} */
@@ -38,6 +42,8 @@
   // Callbacks provided by parent
   export let onClick = (point) => {};
   export let onMove = (point) => {};
+  export let onDown = (point) => {};
+  export let onUp = () => {};
 
   let baseCanvasEl;
   let drawCanvasEl;
@@ -130,6 +136,31 @@
       drawCtx.lineTo(line.endX * scale + offsetX, line.endY * scale + offsetY);
       drawCtx.stroke();
     });
+    if (showVertices) {
+      // draw endpoints
+      drawCtx.fillStyle = 'rgba(0,0,0,0.6)';
+      drawnLines.forEach((line) => {
+        const points = [
+          { x: line.startX, y: line.startY },
+          { x: line.endX, y: line.endY },
+        ];
+        points.forEach((p) => {
+          const sx = p.x * scale + offsetX;
+          const sy = p.y * scale + offsetY;
+          drawCtx.beginPath();
+          drawCtx.arc(sx, sy, 3, 0, Math.PI * 2);
+          drawCtx.fill();
+        });
+      });
+      if (selectedVertex) {
+        drawCtx.fillStyle = 'orange';
+        const sx = selectedVertex.x * scale + offsetX;
+        const sy = selectedVertex.y * scale + offsetY;
+        drawCtx.beginPath();
+        drawCtx.arc(sx, sy, 5, 0, Math.PI * 2);
+        drawCtx.fill();
+      }
+    }
     if (preview) {
       drawCtx.setLineDash([5, 5]);
       drawCtx.strokeStyle = 'blue';
@@ -169,6 +200,11 @@
       lastX = e.clientX;
       lastY = e.clientY;
       e.preventDefault();
+    } else {
+      const rect = drawCanvasEl.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      onDown({ x, y, button: e.button });
     }
   }
   function handleMouseMove(e) {
@@ -183,7 +219,7 @@
       handleMove(e);
     }
   }
-  function handleMouseUp() { isPanning = false; }
+  function handleMouseUp() { isPanning = false; onUp(); }
   function handleContextMenu(e) { if (panning) e.preventDefault(); }
   function handleWheel(e) {
     e.preventDefault();
