@@ -3,16 +3,16 @@
   import History from './History.svelte';
   import Canvas from './Canvas.svelte';
 
-  let tool = 'pencil';
-  let drawing = false;
-  let startX = 0, startY = 0;
-  let currentAngle = 0;
-  let customAngle = null;
-  let selectedLineId = null;
+    let tool = 'pencil';
+    let drawing = false;
+    let startX = 0, startY = 0;
+    let currentAngle = 0;
+    let customAngle = null;
+    let selectedLineId = null;
 
-  let drawnLines = [];
-  let operationsHistory = [];
-  let nextOperationId = 1;
+    let drawnLines = [];
+    let operationsHistory = [];
+    let nextOperationId = 1;
 
   let preview = null; // { startX, startY, endX, endY, currentAngle }
   let showGrid = true;
@@ -32,6 +32,16 @@
       if (drawing && e.key === 'Enter') {
         const input = prompt('Ingrese ángulo personalizado:', String(currentAngle));
         if (input !== null) customAngle = parseFloat(input);
+      } else if (e.key === 'Escape') {
+        // terminar cadena de pluma o cancelar dibujo
+        drawing = false;
+        preview = null;
+      } else if (e.key === 'p' || e.key === 'P') {
+        selectTool('pen');
+      } else if (e.key === 'o' || e.key === 'O') {
+        selectTool('pencil');
+      } else if (e.key === 'e' || e.key === 'E') {
+        selectTool('eraser');
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -51,7 +61,7 @@
   }
 
   function handleCanvasClick(point) {
-    if (tool !== 'pencil') return;
+    if (tool !== 'pencil' && tool !== 'pen') return;
     // convert screen -> world using current transform
     const mouseX = (point.x - offsetX) / scale;
     const mouseY = (point.y - offsetY) / scale;
@@ -60,40 +70,65 @@
     const snappedX = showGrid ? Math.round(mouseX / gridSpacingPx) * gridSpacingPx : mouseX;
     const snappedY = showGrid ? Math.round(mouseY / gridSpacingPx) * gridSpacingPx : mouseY;
 
+    // Si es pluma y no estamos dibujando, arrancamos desde el último endpoint
+    if (tool === 'pen' && !drawing && operationsHistory.length > 0) {
+      const last = operationsHistory[operationsHistory.length - 1];
+      startX = last.endX; startY = last.endY; drawing = true; preview = null;
+      // y este mismo click crea el primer segmento de la cadena
+    }
+
     if (!drawing) {
+      // lápiz: primer click fija inicio
       startX = snappedX; startY = snappedY; drawing = true; preview = null;
-    } else {
+      return;
+        } else {
       const dx = snappedX - startX;
       const dy = snappedY - startY;
+      // Pluma: permite cambiar dirección libremente (sin forzar ángulo anterior)
       const angle = customAngle !== null ? customAngle : snapAngle(dx, dy);
       const rad = angle * Math.PI / 180;
       const dist = Math.sqrt(dx * dx + dy * dy);
       const endX = startX + dist * Math.cos(rad);
       const endY = startY + dist * Math.sin(rad);
 
-      const line = { id: nextOperationId++, startX, startY, endX, endY, angle, dist };
+            const line = { id: nextOperationId++, startX, startY, endX, endY, angle, dist };
       drawnLines = [...drawnLines, line];
       operationsHistory = [...operationsHistory, line];
-      drawing = false;
       customAngle = null;
       preview = null;
+      if (tool === 'pen') {
+        // continue chaining from last end point
+        startX = endX;
+        startY = endY;
+        drawing = true;
+      } else {
+        drawing = false;
+      }
     }
   }
 
   function handleCanvasMove(point) {
-    if (!drawing) return;
+    // En pluma: mostrar preview desde el último endpoint aunque no haya empezado la cadena aún
+    if (!(drawing || (tool === 'pen' && operationsHistory.length > 0))) return;
     const mouseX = (point.x - offsetX) / scale;
     const mouseY = (point.y - offsetY) / scale;
     const snappedX = showGrid ? Math.round(mouseX / gridSpacingPx) * gridSpacingPx : mouseX;
     const snappedY = showGrid ? Math.round(mouseY / gridSpacingPx) * gridSpacingPx : mouseY;
-    const dx = snappedX - startX;
-    const dy = snappedY - startY;
+    let originX = startX;
+    let originY = startY;
+    if (!drawing && tool === 'pen') {
+      const last = operationsHistory[operationsHistory.length - 1];
+      originX = last.endX;
+      originY = last.endY;
+    }
+    const dx = snappedX - originX;
+    const dy = snappedY - originY;
     currentAngle = customAngle !== null ? customAngle : snapAngle(dx, dy);
     const rad = currentAngle * Math.PI / 180;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const endX = startX + dist * Math.cos(rad);
-    const endY = startY + dist * Math.sin(rad);
-    preview = { startX, startY, endX, endY, currentAngle };
+    const endX = originX + dist * Math.cos(rad);
+    const endY = originY + dist * Math.sin(rad);
+    preview = { startX: originX, startY: originY, endX, endY, currentAngle };
   }
 
   function deleteLine(id) {
@@ -112,7 +147,7 @@
 
   $: linesCount = drawnLines.length;
   $: totalLength = Math.round(drawnLines.reduce((sum, l) => sum + l.dist, 0));
- </script>
+</script>
 
 <div class="app-container">
   <History
@@ -155,6 +190,8 @@
     <div class="toolbar">
         <button class="tool-btn pencil-btn {tool==='pencil' ? 'active' : ''}"
                 on:click={() => selectTool('pencil')}>✏️ Lápiz</button>
+        <button class="tool-btn pencil-btn {tool==='pen' ? 'active' : ''}"
+                on:click={() => selectTool('pen')}>🖊️ Pluma</button>
         <button class="tool-btn eraser-btn {tool==='eraser' ? 'active' : ''}"
                 on:click={() => selectTool('eraser')}>🩹 Goma</button>
         <div class="angle-display">Ángulo: <span>{currentAngle}</span>°</div>
