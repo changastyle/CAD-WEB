@@ -1,9 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import History from './History.svelte';
-
-  let baseCanvasEl;
-  let drawCanvasEl;
+  import Canvas from './Canvas.svelte';
 
   let tool = 'pencil';
   let drawing = false;
@@ -16,24 +14,20 @@
   let operationsHistory = [];
   let nextOperationId = 1;
 
-  let baseCtx;
-  let drawCtx;
+  let preview = null; // { startX, startY, endX, endY, currentAngle }
+  let showGrid = true;
+  let unit = 'cm'; // 'mm' | 'cm' | 'm'
+  let pixelsPerMm = 4; // base scale; can be configurable later
+  $: gridSpacingPx = unit === 'mm' ? 1 * pixelsPerMm : unit === 'cm' ? 10 * pixelsPerMm : 1000 * pixelsPerMm;
+  let scale = 1;
+  let offsetX = 0;
+  let offsetY = 0;
+  let panning = false;
 
   const width = 800;
   const height = 600;
 
   onMount(() => {
-    baseCtx = baseCanvasEl.getContext('2d');
-    drawCtx = drawCanvasEl.getContext('2d');
-
-    const img = new Image();
-    img.src = 'https://upload.wikimedia.org/wikipedia/commons/3/3f/Logo_svelte.svg';
-    img.onload = () => {
-      baseCtx.drawImage(img, 50, 50, 150, 150);
-    };
-
-    updateCursor();
-
     const handleKey = (e) => {
       if (drawing && e.key === 'Enter') {
         const input = prompt('Ingrese ángulo personalizado:', String(currentAngle));
@@ -44,16 +38,10 @@
     return () => window.removeEventListener('keydown', handleKey);
   });
 
-  function updateCursor() {
-    if (drawCanvasEl) {
-      drawCanvasEl.style.cursor = tool === 'pencil' ? 'crosshair' : 'not-allowed';
-    }
-  }
-
   function selectTool(t) {
     tool = t;
     drawing = false;
-    updateCursor();
+    preview = null;
   }
 
   function snapAngle(dx, dy) {
@@ -62,17 +50,21 @@
     return snaps.reduce((prev, curr) => Math.abs(curr - deg) < Math.abs(prev - deg) ? curr : prev);
   }
 
-  function handleCanvasClick(e) {
+  function handleCanvasClick(point) {
     if (tool !== 'pencil') return;
-    const rect = drawCanvasEl.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    // convert screen -> world using current transform
+    const mouseX = (point.x - offsetX) / scale;
+    const mouseY = (point.y - offsetY) / scale;
+
+    // snap to grid if enabled
+    const snappedX = showGrid ? Math.round(mouseX / gridSpacingPx) * gridSpacingPx : mouseX;
+    const snappedY = showGrid ? Math.round(mouseY / gridSpacingPx) * gridSpacingPx : mouseY;
 
     if (!drawing) {
-      startX = mouseX; startY = mouseY; drawing = true;
+      startX = snappedX; startY = snappedY; drawing = true; preview = null;
     } else {
-      const dx = mouseX - startX;
-      const dy = mouseY - startY;
+      const dx = snappedX - startX;
+      const dy = snappedY - startY;
       const angle = customAngle !== null ? customAngle : snapAngle(dx, dy);
       const rad = angle * Math.PI / 180;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -84,55 +76,30 @@
       operationsHistory = [...operationsHistory, line];
       drawing = false;
       customAngle = null;
-      redrawAllLines();
+      preview = null;
     }
   }
 
-  function handleCanvasMove(e) {
+  function handleCanvasMove(point) {
     if (!drawing) return;
-    redrawAllLines();
-    const rect = drawCanvasEl.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-    const dx = mouseX - startX;
-    const dy = mouseY - startY;
+    const mouseX = (point.x - offsetX) / scale;
+    const mouseY = (point.y - offsetY) / scale;
+    const snappedX = showGrid ? Math.round(mouseX / gridSpacingPx) * gridSpacingPx : mouseX;
+    const snappedY = showGrid ? Math.round(mouseY / gridSpacingPx) * gridSpacingPx : mouseY;
+    const dx = snappedX - startX;
+    const dy = snappedY - startY;
     currentAngle = customAngle !== null ? customAngle : snapAngle(dx, dy);
     const rad = currentAngle * Math.PI / 180;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const endX = startX + dist * Math.cos(rad);
     const endY = startY + dist * Math.sin(rad);
-
-    drawCtx.setLineDash([5, 5]);
-    drawCtx.strokeStyle = 'blue';
-    drawCtx.lineWidth = 1;
-    drawCtx.beginPath();
-    drawCtx.moveTo(startX, startY);
-    drawCtx.lineTo(endX, endY);
-    drawCtx.stroke();
-    drawCtx.fillStyle = 'black';
-    drawCtx.font = '16px sans-serif';
-    drawCtx.fillText(currentAngle + '°', endX + 10, endY - 10);
-  }
-
-  function redrawAllLines() {
-    if (!drawCtx || !drawCanvasEl) return;
-    drawCtx.clearRect(0, 0, drawCanvasEl.width, drawCanvasEl.height);
-    drawnLines.forEach((line) => {
-      drawCtx.setLineDash([]);
-      drawCtx.strokeStyle = (selectedLineId === line.id) ? 'orange' : 'red';
-      drawCtx.lineWidth = 2;
-      drawCtx.beginPath();
-      drawCtx.moveTo(line.startX, line.startY);
-      drawCtx.lineTo(line.endX, line.endY);
-      drawCtx.stroke();
-    });
+    preview = { startX, startY, endX, endY, currentAngle };
   }
 
   function deleteLine(id) {
     operationsHistory = operationsHistory.filter((l) => l.id !== id);
     drawnLines = drawnLines.filter((l) => l.id !== id);
     if (selectedLineId === id) selectedLineId = null;
-    redrawAllLines();
   }
 
   function clearHistory() {
@@ -140,7 +107,7 @@
     drawnLines = [];
     nextOperationId = 1;
     selectedLineId = null;
-    redrawAllLines();
+    preview = null;
   }
 
   $: linesCount = drawnLines.length;
@@ -153,34 +120,61 @@
     selectedId={selectedLineId}
     linesCount={linesCount}
     totalLength={totalLength}
-    onSelect={(id) => { selectedLineId = id; redrawAllLines(); }}
+    onSelect={(id) => { selectedLineId = id; }}
     onDelete={(id) => deleteLine(id)}
     onClear={clearHistory}
   />
 
   <div class="drawing-area">
-    <div class="drawing-container">
-      <canvas bind:this={baseCanvasEl} width={width} height={height}></canvas>
-      <canvas bind:this={drawCanvasEl} width={width} height={height}
-              on:click={handleCanvasClick}
-              on:mousemove={handleCanvasMove}></canvas>
-      <div class="toolbar">
+    <Canvas
+      width={width}
+      height={height}
+      tool={tool}
+      drawnLines={drawnLines}
+      selectedLineId={selectedLineId}
+      preview={preview}
+      showGrid={showGrid}
+      gridSpacingPx={gridSpacingPx}
+      scale={scale}
+      offsetX={offsetX}
+      offsetY={offsetY}
+      panning={panning}
+      onPan={(dx,dy) => { offsetX += dx; offsetY += dy; }}
+      onZoom={(x,y,deltaY) => {
+        const zoomFactor = Math.exp(-deltaY * 0.001);
+        const newScale = Math.max(0.1, Math.min(10, scale * zoomFactor));
+        const sx = (x - offsetX) / scale;
+        const sy = (y - offsetY) / scale;
+        offsetX = x - sx * newScale;
+        offsetY = y - sy * newScale;
+        scale = newScale;
+      }}
+      onClick={handleCanvasClick}
+      onMove={handleCanvasMove}
+    />
+    <div class="toolbar">
         <button class="tool-btn pencil-btn {tool==='pencil' ? 'active' : ''}"
                 on:click={() => selectTool('pencil')}>✏️ Lápiz</button>
         <button class="tool-btn eraser-btn {tool==='eraser' ? 'active' : ''}"
                 on:click={() => selectTool('eraser')}>🩹 Goma</button>
         <div class="angle-display">Ángulo: <span>{currentAngle}</span>°</div>
-      </div>
+        <label style="margin-left:10px; display:flex; align-items:center; gap:6px;">
+          <input type="checkbox" bind:checked={showGrid}>
+          Grid
+        </label>
+        <select bind:value={unit} aria-label="Unidad de grilla" style="margin-left:6px;">
+          <option value="mm">1 mm</option>
+          <option value="cm">1 cm</option>
+          <option value="m">1 m</option>
+        </select>
     </div>
   </div>
 </div>
 
     <style>
         .app-container { display:flex; width:100%; max-width:1200px; height:90vh; background:white; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.15); }
-        .drawing-area { flex:1; padding:20px; display:flex; flex-direction:column; }
-        .drawing-container { position:relative; width:100%; height:100%; border:2px solid #bdc3c7; border-radius:8px; overflow:hidden; background:white; }
-        canvas { position:absolute; top:0; left:0; }
-        .toolbar { position:absolute; top:10px; left:10px; right:10px; height:60px; background:rgba(255,255,255,0.9); display:flex; gap:10px; align-items:center; padding:0 10px; z-index:10; border-radius:8px; }
+        .drawing-area { position:relative; flex:1; padding:20px; display:flex; flex-direction:column; }
+        .toolbar { position:absolute; top:30px; left:30px; right:30px; height:60px; background:rgba(255,255,255,0.9); display:flex; gap:10px; align-items:center; padding:0 10px; z-index:10; border-radius:8px; }
         .tool-btn { padding:5px 10px; border:none; border-radius:5px; cursor:pointer; font-weight:bold; }
         .pencil-btn.active { background:#2980b9; color:white; }
         .eraser-btn.active { background:#d35400; color:white; }
