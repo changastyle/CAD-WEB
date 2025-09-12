@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import History from './History.svelte';
 
   let baseCanvasEl;
   let drawCanvasEl;
@@ -144,34 +145,18 @@
 
   $: linesCount = drawnLines.length;
   $: totalLength = Math.round(drawnLines.reduce((sum, l) => sum + l.dist, 0));
-</script>
+ </script>
 
 <div class="app-container">
-  <div class="history-panel">
-    <div class="history-header">
-      <div>Historial</div>
-      <button class="clear-btn" on:click={clearHistory}>Limpiar Todo</button>
-    </div>
-
-    {#if operationsHistory.length === 0}
-      <div class="empty-history">No hay operaciones registradas</div>
-    {:else}
-      {#each [...operationsHistory].slice().reverse() as line}
-        <div class="operation-item {selectedLineId===line.id ? 'selected' : ''}"
-             role="button" tabindex="0" aria-pressed={selectedLineId===line.id}
-             on:click={() => { selectedLineId = line.id; redrawAllLines(); }}
-             on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { selectedLineId = line.id; redrawAllLines(); } }}>
-          Línea #{line.id} | ángulo: {line.angle}° | longitud: {Math.round(line.dist)}px
-          <button class="delete-line-btn" on:click|stopPropagation={() => deleteLine(line.id)}>Eliminar</button>
-        </div>
-      {/each}
-    {/if}
-
-    <div class="stats">
-      <div>Líneas: {linesCount}</div>
-      <div>Longitud total: {totalLength}px</div>
-    </div>
-  </div>
+  <History
+    operations={operationsHistory}
+    selectedId={selectedLineId}
+    linesCount={linesCount}
+    totalLength={totalLength}
+    onSelect={(id) => { selectedLineId = id; redrawAllLines(); }}
+    onDelete={(id) => deleteLine(id)}
+    onClear={clearHistory}
+  />
 
   <div class="drawing-area">
     <div class="drawing-container">
@@ -192,12 +177,6 @@
 
     <style>
         .app-container { display:flex; width:100%; max-width:1200px; height:90vh; background:white; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.15); }
-        .history-panel { width:300px; background:#2c3e50; color:white; padding:20px; overflow-y:auto; }
-        .history-header { display:flex; justify-content:space-between; margin-bottom:20px; }
-        .clear-btn { background:#e74c3c; border:none; padding:8px 15px; border-radius:5px; cursor:pointer; font-weight:bold; }
-        .operation-item { padding:10px; margin-bottom:10px; background:#34495e; border-radius:5px; cursor:pointer; }
-        .operation-item.selected { border:2px solid #e74c3c; background:#c0392b; }
-        .delete-line-btn { margin-top:5px; background:#c0392b; color:white; border:none; padding:5px 10px; border-radius:5px; cursor:pointer; }
         .drawing-area { flex:1; padding:20px; display:flex; flex-direction:column; }
         .drawing-container { position:relative; width:100%; height:100%; border:2px solid #bdc3c7; border-radius:8px; overflow:hidden; background:white; }
         canvas { position:absolute; top:0; left:0; }
@@ -206,5 +185,4 @@
         .pencil-btn.active { background:#2980b9; color:white; }
         .eraser-btn.active { background:#d35400; color:white; }
         .angle-display { margin-left:auto; padding:5px 10px; background:#ecf0f1; border-radius:5px; }
-        .stats { margin-top:10px; font-size:14px; color:#ecf0f1; display:flex; justify-content:space-between; }
     </style>
