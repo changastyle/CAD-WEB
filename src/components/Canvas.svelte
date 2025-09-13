@@ -129,6 +129,8 @@
   // Redraw lines when inputs change
   $: if (drawCtx && drawCanvasEl) {
     drawCtx.clearRect(0, 0, drawCanvasEl.width, drawCanvasEl.height);
+
+    // Primero dibujamos todas las líneas
     drawnLines.forEach((line) => {
       drawCtx.setLineDash([]);
       drawCtx.strokeStyle = (selectedLineId === line.id) ? 'orange' : 'red';
@@ -137,9 +139,21 @@
       drawCtx.moveTo(line.startX * scale + offsetX, line.startY * scale + offsetY);
       drawCtx.lineTo(line.endX * scale + offsetX, line.endY * scale + offsetY);
       drawCtx.stroke();
+
+      // Dibujar la cota de la línea
+      const midX = (line.startX + line.endX) / 2 * scale + offsetX;
+      const midY = (line.startY + line.endY) / 2 * scale + offsetY;
+      const distInUnits = line.dist / gridSpacingPx;
+      drawCtx.font = '12px Arial';
+      drawCtx.fillStyle = 'black';
+      drawCtx.textAlign = 'center';
+      drawCtx.textBaseline = 'bottom';
+      const offset = 10;
+      drawCtx.fillText(`${Math.round(distInUnits)} ${unit}`, midX, midY - offset);
     });
+
+    // Luego dibujamos los vértices si están activados
     if (showVertices) {
-      // draw endpoints
       drawCtx.fillStyle = 'rgba(0,0,0,0.6)';
       drawnLines.forEach((line) => {
         const points = [
@@ -163,6 +177,8 @@
         drawCtx.fill();
       }
     }
+
+    // Finalmente, si hay preview, la dibujamos encima
     if (preview) {
       // Dibujar línea preview
       drawCtx.setLineDash([5, 5]);
@@ -177,48 +193,33 @@
       const dx = preview.endX - preview.startX;
       const dy = preview.endY - preview.startY;
       const distInPixels = Math.sqrt(dx*dx + dy*dy);
-      const lengthInUnits = distInPixels / gridSpacingPx; // Convertir píxeles a unidades seleccionadas
+      const lengthInUnits = distInPixels / gridSpacingPx;
 
-      // Posición para mostrar la longitud (en el centro de la línea)
+      // Posición para mostrar la longitud
       const midX = (preview.startX + preview.endX) / 2 * scale + offsetX;
       const midY = (preview.startY + preview.endY) / 2 * scale + offsetY;
 
-      // Mostrar longitud
+      // Mostrar longitud en azul (para distinguirla de las cotas finales)
       drawCtx.font = '14px Arial';
       drawCtx.fillStyle = 'blue';
       drawCtx.textAlign = 'center';
       drawCtx.textBaseline = 'bottom';
-      drawCtx.fillText(`${Math.round(lengthInUnits)} ${unit}`, midX, midY - 10);
+      drawCtx.fillText(`${Math.round(lengthInUnits)} ${unit}`, midX, midY - 15);
 
-      // Mostrar ángulo (ahora cerca del punto final)
+      // Mostrar ángulo cerca del punto final
       drawCtx.fillStyle = 'black';
       drawCtx.font = '12px Arial';
       const angle = preview.currentAngle;
       if (Math.abs(angle % 90) < 5 || Math.abs(angle % 90) > 85) {
-        // Para ángulos rectos, mostrar un cuadrado
         const size = 8;
         drawCtx.fillRect(preview.endX * scale + offsetX - size/2, preview.endY * scale + offsetY - size/2, size, size);
       } else {
-        // Para otros ángulos, mostrar círculo y valor
         drawCtx.beginPath();
         drawCtx.arc(preview.endX * scale + offsetX, preview.endY * scale + offsetY, 6, 0, Math.PI * 2);
         drawCtx.fill();
         drawCtx.fillText(`${Math.round(angle)}°`, preview.endX * scale + offsetX + 15, preview.endY * scale + offsetY);
       }
     }
-
-    // Dibujar cotas para las líneas existentes
-    drawnLines.forEach((line) => {
-      const midX = (line.startX + line.endX) / 2 * scale + offsetX;
-      const midY = (line.startY + line.endY) / 2 * scale + offsetY;
-      const distInUnits = line.dist / gridSpacingPx;
-      drawCtx.font = '12px Arial';
-      drawCtx.fillStyle = 'black';
-      drawCtx.textAlign = 'center';
-      drawCtx.textBaseline = 'bottom';
-      const offset = 10;
-      drawCtx.fillText(`${Math.round(distInUnits)} ${unit}`, midX, midY - offset);
-    });
   }
 
   function handleClick(e) {
