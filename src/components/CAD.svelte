@@ -175,11 +175,19 @@
       // Pluma: permite cambiar dirección libremente (sin forzar ángulo anterior)
       const angle = customAngle !== null ? customAngle : snapAngle(dx, dy);
       const rad = angle * Math.PI / 180;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      const endX = startX + dist * Math.cos(rad);
-      const endY = startY + dist * Math.sin(rad);
+      const distInPixels = Math.sqrt(dx * dx + dy * dy);
+      const endX = startX + distInPixels * Math.cos(rad);
+      const endY = startY + distInPixels * Math.sin(rad);
 
-            const line = { id: nextOperationId++, startX, startY, endX, endY, angle, dist };
+      const line = {
+        id: nextOperationId++,
+        startX,
+        startY,
+        endX,
+        endY,
+        angle,
+        dist: distInPixels // guardamos la distancia en píxeles para convertirla después
+      };
       drawnLines = [...drawnLines, line];
       operationsHistory = [...operationsHistory, line];
       customAngle = null;
@@ -205,9 +213,11 @@
       drawnLines = drawnLines.map(l => {
         if (l.id !== draggingVertex.lineId) return l;
         if (draggingVertex.end === 'start') {
-          return { ...l, startX: snappedX, startY: snappedY, dist: Math.hypot((l.endX - snappedX),(l.endY - snappedY)), angle: Math.round(Math.atan2(l.endY - snappedY, l.endX - snappedX) * 180/Math.PI) };
+          const dist = Math.hypot((l.endX - snappedX),(l.endY - snappedY));
+          return { ...l, startX: snappedX, startY: snappedY, dist, angle: Math.round(Math.atan2(l.endY - snappedY, l.endX - snappedX) * 180/Math.PI) };
         } else {
-          return { ...l, endX: snappedX, endY: snappedY, dist: Math.hypot((snappedX - l.startX),(snappedY - l.startY)), angle: Math.round(Math.atan2(snappedY - l.startY, snappedX - l.startX) * 180/Math.PI) };
+          const dist = Math.hypot((snappedX - l.startX),(snappedY - l.startY));
+          return { ...l, endX: snappedX, endY: snappedY, dist, angle: Math.round(Math.atan2(snappedY - l.startY, snappedX - l.startX) * 180/Math.PI) };
         }
       });
       operationsHistory = drawnLines;
@@ -252,7 +262,7 @@
   }
 
   $: linesCount = drawnLines.length;
-  $: totalLength = Math.round(drawnLines.reduce((sum, l) => sum + l.dist, 0));
+  $: totalLength = Math.round(drawnLines.reduce((sum, l) => sum + l.dist / gridSpacingPx, 0));
 </script>
 
 <div class="app-container">
@@ -264,6 +274,7 @@
     onSelect={(id) => { selectedLineId = id; }}
     onDelete={(id) => deleteLine(id)}
     onClear={clearHistory}
+    unit={unit}
   />
 
   <div class="drawing-area">
