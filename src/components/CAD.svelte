@@ -45,6 +45,8 @@
         // también cancelar drag de vértice
         draggingVertex = null;
         selectionMode = 'none';
+        // desactivar herramienta actual
+        tool = 'none';
       } else if (e.key === 'p' || e.key === 'P') {
         selectTool('pen');
       } else if (e.key === 'o' || e.key === 'O') {
@@ -77,7 +79,14 @@
   });
 
   function selectTool(t) {
-    tool = t;
+    // toggle: si ya está activo, desactivar
+    if (tool === t) {
+      tool = 'none';
+      drawing = false;
+      preview = null;
+    } else {
+      tool = t;
+    }
     drawing = false;
     preview = null;
   }
@@ -114,7 +123,7 @@
       });
       selectedVertex = bestInfo ? { x: bestInfo.x, y: bestInfo.y } : null;
       draggingVertex = bestInfo ? { lineId: bestInfo.lineId, end: bestInfo.end } : null;
-      return;
+      // no return aquí, permitir que continúe el flujo normal
     }
     if (selectionMode === 'edge') {
       const xw = (point.x - offsetX) / scale;
@@ -303,6 +312,8 @@
             }
           });
           operationsHistory = drawnLines;
+          // salir del modo después de mover
+          selectionMode = 'none';
         }
         draggingVertex = null;
       }}
