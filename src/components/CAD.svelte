@@ -275,6 +275,7 @@
     onDelete={(id) => deleteLine(id)}
     onClear={clearHistory}
     unit={unit}
+    gridSpacingPx={gridSpacingPx}
   />
 
   <div class="drawing-area">

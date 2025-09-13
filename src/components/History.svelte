@@ -7,6 +7,7 @@
   export let onDelete = (id) => {};
   export let onClear = () => {};
   export let unit = 'cm';
+  export let gridSpacingPx;
 </script>
 
 <div class="history-panel">
@@ -23,7 +24,7 @@
            role="button" tabindex="0" aria-pressed={selectedId===line.id}
            on:click={() => onSelect(line.id)}
            on:keydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { onSelect(line.id); } }}>
-        Línea #{line.id} | ángulo: {line.angle}° | longitud: {Math.round(line.dist)} {unit}
+        Línea #{line.id} | ángulo: {line.angle}° | longitud: {Math.round(line.dist / gridSpacingPx)} {unit}
         <button class="delete-line-btn" on:click|stopPropagation={() => onDelete(line.id)}>Eliminar</button>
       </div>
     {/each}
