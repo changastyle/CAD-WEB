@@ -44,6 +44,7 @@
         preview = null;
         // también cancelar drag de vértice
         draggingVertex = null;
+        selectionMode = 'none';
       } else if (e.key === 'p' || e.key === 'P') {
         selectTool('pen');
       } else if (e.key === 'o' || e.key === 'O') {
@@ -68,6 +69,7 @@
         });
         operationsHistory = drawnLines;
         draggingVertex = null;
+        selectionMode = 'none';
       }
     };
     window.addEventListener('keydown', handleKey);
@@ -306,12 +308,21 @@
       }}
     />
     <div class="toolbar">
+      <div class="tool-group left">
         <button class="tool-btn pencil-btn {tool==='pencil' ? 'active' : ''}"
-                on:click={() => selectTool('pencil')}>✏️ Lápiz</button>
+                on:click={() => { selectionMode='none'; selectTool('pencil'); }}>✏️ Lápiz</button>
         <button class="tool-btn pencil-btn {tool==='pen' ? 'active' : ''}"
-                on:click={() => selectTool('pen')}>🖊️ Pluma</button>
+                on:click={() => { selectionMode='none'; selectTool('pen'); }}>🖊️ Pluma</button>
         <button class="tool-btn eraser-btn {tool==='eraser' ? 'active' : ''}"
-                on:click={() => selectTool('eraser')}>🩹 Goma</button>
+                on:click={() => { selectionMode='none'; selectTool('eraser'); }}>🩹 Goma</button>
+      </div>
+      <div class="tool-group center">
+        <button class="tool-btn select-btn {selectionMode==='vertex' ? 'active' : ''}"
+                on:click={() => { selectionMode = selectionMode==='vertex' ? 'none' : 'vertex'; draggingVertex=null; }}>● Punto (1)</button>
+        <button class="tool-btn select-btn {selectionMode==='edge' ? 'active' : ''}"
+                on:click={() => { selectionMode = selectionMode==='edge' ? 'none' : 'edge'; draggingVertex=null; }}>─ Arista (2)</button>
+      </div>
+      <div class="tool-group right">
         <div class="angle-display">Ángulo: <span>{currentAngle}</span>°</div>
         <label style="margin-left:10px; display:flex; align-items:center; gap:6px;">
           <input type="checkbox" bind:checked={showGrid}>
@@ -322,6 +333,7 @@
           <option value="cm">1 cm</option>
           <option value="m">1 m</option>
         </select>
+      </div>
     </div>
   </div>
 </div>
@@ -329,7 +341,9 @@
     <style>
         .app-container { display:flex; width:100%; max-width:1200px; height:90vh; background:white; border-radius:12px; overflow:hidden; box-shadow:0 10px 30px rgba(0,0,0,0.15); }
         .drawing-area { position:relative; flex:1; padding:20px; display:flex; flex-direction:column; }
-        .toolbar { position:absolute; top:30px; left:30px; right:30px; height:60px; background:rgba(255,255,255,0.9); display:flex; gap:10px; align-items:center; padding:0 10px; z-index:10; border-radius:8px; }
+        .toolbar { position:absolute; top:30px; left:30px; right:30px; height:60px; background:rgba(255,255,255,0.9); display:flex; gap:10px; align-items:center; padding:0 10px; z-index:10; border-radius:8px; justify-content:space-between; }
+        .tool-group.left, .tool-group.center, .tool-group.right { display:flex; align-items:center; gap:8px; }
+        .select-btn.active { background:#16a085; color:white; }
         .tool-btn { padding:5px 10px; border:none; border-radius:5px; cursor:pointer; font-weight:bold; }
         .pencil-btn.active { background:#2980b9; color:white; }
         .eraser-btn.active { background:#d35400; color:white; }
